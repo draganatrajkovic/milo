@@ -41,7 +41,7 @@ const getProductJson = () => {
   };
 };
 
-const App = ({ rootEl, strings }) => html`
+const App = ({ strings }) => html`
     <${HelixReview}
       clickTimeout="5000"
       commentThreshold=${COMMENT_THRESHOLD}
@@ -125,7 +125,7 @@ export default async function init(el) {
   strings.postUrl = strings.postUrl ? checkPostUrl(strings.postUrl, env) : strings.postUrl;
   removeMetaDataElements(el);
 
-  const app = html` <${App} rootEl=${el} strings="${strings}" /> `;
+  const app = html` <${App} strings="${strings}" /> `;
 
   render(app, el);
 }
