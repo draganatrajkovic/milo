@@ -2,6 +2,7 @@ import { html, render } from '../../deps/htm-preact.js';
 
 import { getMetadata, loadStyle, getConfig } from '../../utils/utils.js';
 import HelixReview from './components/helixReview/HelixReview.js';
+import { checkPostUrl } from './utils/utils.js';
 
 const COMMENT_THRESHOLD = 3;
 
@@ -115,12 +116,13 @@ const removeMetaDataElements = (el) => {
 };
 
 export default async function init(el) {
-  const { miloLibs, codeRoot } = getConfig();
+  const { miloLibs, codeRoot, env } = getConfig();
   const base = miloLibs || codeRoot;
 
   loadStyle(`${base}/ui/page/page.css`);
   const metaData = getMetaData(el);
   const strings = getStrings(metaData);
+  strings.postUrl = strings.postUrl ? checkPostUrl(strings.postUrl, env) : strings.postUrl;
   removeMetaDataElements(el);
 
   const app = html` <${App} rootEl=${el} strings="${strings}" /> `;
