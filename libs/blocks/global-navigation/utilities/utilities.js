@@ -1,4 +1,5 @@
 import { getConfig, getMetadata, loadStyle, loadLana } from '../../../utils/utils.js';
+import { processTrackingLabels } from '../../../martech/attributes.js';
 
 loadLana();
 
@@ -51,7 +52,7 @@ export const getFedsPlaceholderConfig = () => {
 export function getAnalyticsValue(str, index) {
   if (typeof str !== 'string' || !str.length) return str;
 
-  let analyticsValue = str.trim().replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '');
+  let analyticsValue = processTrackingLabels(str, false, 30);
   analyticsValue = typeof index === 'number' ? `${analyticsValue}-${index}` : analyticsValue;
 
   return analyticsValue;
@@ -188,18 +189,19 @@ export function trigger({ element, event, type } = {}) {
 
 export const yieldToMain = () => new Promise((resolve) => { setTimeout(resolve, 0); });
 
-export const lanaLog = ({ message, e = '' }) => {
+export const lanaLog = ({ message, e = '', tags = 'errorType=default' }) => {
   const url = getMetadata('gnav-source');
   window.lana.log(`${message} | gnav-source: ${url} | href: ${window.location.href} | ${e.reason || e.error || e.message || e}`, {
     clientId: 'feds-milo',
     sampleRate: 1,
+    tags,
   });
 };
 
-export const logErrorFor = async (fn, message) => {
+export const logErrorFor = async (fn, message, tags) => {
   try {
     await fn();
   } catch (e) {
-    lanaLog({ message, e });
+    lanaLog({ message, e, tags });
   }
 };

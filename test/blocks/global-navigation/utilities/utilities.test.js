@@ -1,4 +1,5 @@
 import { expect } from '@esm-bundle/chai';
+import sinon from 'sinon';
 import {
   toFragment,
   getFedsPlaceholderConfig,
@@ -7,6 +8,7 @@ import {
   closeAllDropdowns,
   trigger,
   getExperienceName,
+  logErrorFor,
 } from '../../../../libs/blocks/global-navigation/utilities/utilities.js';
 import { setConfig } from '../../../../libs/utils/utils.js';
 import { createFullGlobalNavigation, config } from '../test-utilities.js';
@@ -55,8 +57,8 @@ describe('global navigation utilities', () => {
 
   it('getAnalyticsValue should return a string', () => {
     expect(getAnalyticsValue('test')).to.equal('test');
-    expect(getAnalyticsValue('test test')).to.equal('test_test');
-    expect(getAnalyticsValue('test test 1', 2)).to.equal('test_test_1-2');
+    expect(getAnalyticsValue('test test?')).to.equal('test test');
+    expect(getAnalyticsValue('test test 1?', 2)).to.equal('test test 1-2');
   });
 
   describe('decorateCta', () => {
@@ -155,5 +157,28 @@ describe('global navigation utilities', () => {
     expect(experienceName).to.equal('');
     config.imsClientId = ogImsClientId;
     setConfig(config);
+  });
+
+  describe('LANA logs', () => {
+    it('should send LANA log on error', async () => {
+      // Mock the global window.lana.log method
+      const originalLanaLog = window.lana.log;
+      const lanaLogSpy = sinon.spy();
+      window.lana.log = lanaLogSpy;
+
+      // The function that will throw an error.
+      const erroneousFunction = async () => {
+        throw new Error('error');
+      };
+
+      // Call logErrorFor.
+      await logErrorFor(erroneousFunction, 'message', 'someTags');
+
+      // Check if lanaLog (through window.lana.log) was called with expected parameters.
+      expect(lanaLogSpy.calledOnce).to.be.true;
+
+      // Restore the original window.lana.log method
+      window.lana.log = originalLanaLog;
+    });
   });
 });

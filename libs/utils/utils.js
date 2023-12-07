@@ -13,6 +13,7 @@ const MILO_BLOCKS = [
   'article-header',
   'aside',
   'author-header',
+  'brick',
   'bulk-publish',
   'caas',
   'caas-config',
@@ -42,6 +43,7 @@ const MILO_BLOCKS = [
   'media',
   'merch',
   'merch-card',
+  'merch-offers',
   'modal',
   'modal-metadata',
   'pdf-viewer',
@@ -55,6 +57,7 @@ const MILO_BLOCKS = [
   'preflight',
   'promo',
   'quiz',
+  'quiz-marquee',
   'quiz-results',
   'tabs',
   'table-of-contents',
@@ -649,6 +652,8 @@ function decorateHeader() {
   const autoBreadcrumbs = getMetadata('breadcrumbs-from-url') === 'on';
   if (baseBreadcrumbs || breadcrumbs || autoBreadcrumbs) header.classList.add('has-breadcrumbs');
   if (breadcrumbs) header.append(breadcrumbs);
+  const promo = getMetadata('gnav-promo-source');
+  if (promo?.length) header.classList.add('has-promo');
 }
 
 async function decorateIcons(area, config) {
@@ -662,7 +667,7 @@ async function decorateIcons(area, config) {
 }
 
 async function decoratePlaceholders(area, config) {
-  const el = area.documentElement ? area.body : area;
+  const el = area.querySelector('main') || area;
   const regex = /{{(.*?)}}|%7B%7B(.*?)%7D%7D/g;
   const found = regex.test(el.innerHTML);
   if (!found) return;
@@ -727,13 +732,13 @@ function decorateSections(el, isDoc) {
   return [...el.querySelectorAll(selector)].map(decorateSection);
 }
 
-function decorateFooterPromo(config) {
-  const footerPromo = getMetadata('footer-promo-tag');
-  if (!footerPromo) return;
-  const href = `${config.locale.contentRoot}/fragments/footer-promos/${footerPromo}`;
-  const para = createTag('p', {}, createTag('a', { href }, href));
-  const section = createTag('div', null, para);
-  document.querySelector('main > div:last-of-type').insertAdjacentElement('afterend', section);
+export async function decorateFooterPromo() {
+  const footerPromoTag = getMetadata('footer-promo-tag');
+  const footerPromoType = getMetadata('footer-promo-type');
+  if (!footerPromoTag && footerPromoType !== 'taxonomy') return;
+
+  const { default: initFooterPromo } = await import('../features/footer-promo.js');
+  await initFooterPromo(footerPromoTag, footerPromoType);
 }
 
 let imsLoaded;
@@ -797,10 +802,6 @@ async function checkForPageMods() {
       `${base}/features/personalization/personalization.js`,
       { as: 'script', rel: 'modulepreload' },
     );
-    loadLink(
-      `${base}/features/personalization/manifest-utils.js`,
-      { as: 'script', rel: 'modulepreload' },
-    );
   }
 
   if (persEnabled) {
@@ -810,8 +811,10 @@ async function checkForPageMods() {
   }
 
   const { env } = getConfig();
+  let previewOn = false;
   const mep = PAGE_URL.searchParams.get('mep');
   if (mep !== null || (env?.name !== 'prod' && (persEnabled || targetEnabled))) {
+    previewOn = true;
     const { default: addPreviewToConfig } = await import('../features/personalization/add-preview-to-config.js');
     persManifests = await addPreviewToConfig({
       pageUrl: PAGE_URL,
@@ -825,14 +828,17 @@ async function checkForPageMods() {
     await loadMartech({ persEnabled: true, persManifests, targetMd });
   } else if (persManifests.length) {
     loadIms().catch(() => {});
-    const { preloadManifests } = await import('../features/personalization/manifest-utils.js');
+    const { preloadManifests, applyPers } = await import('../features/personalization/personalization.js');
     const manifests = preloadManifests({ persManifests }, { getConfig, loadLink });
-
-    const { applyPers } = await import('../features/personalization/personalization.js');
 
     await applyPers(manifests);
   } else {
-    document.body.dataset.mep = 'default|default';
+    document.body.dataset.mep = 'nopzn|nopzn';
+  }
+
+  if (previewOn) {
+    import('../features/personalization/preview.js')
+      .then(({ default: decoratePreviewMode }) => decoratePreviewMode());
   }
 }
 
@@ -944,10 +950,9 @@ function decorateMeta() {
   });
 }
 
-function decorateDocumentExtras(config) {
+function decorateDocumentExtras() {
   decorateMeta();
   decorateHeader();
-  decorateFooterPromo(config);
 
   import('./samplerum.js').then(({ addRumListeners }) => {
     addRumListeners();
@@ -961,6 +966,9 @@ async function documentPostSectionLoading(config) {
     const { default: loadGeoRouting } = await import('../features/georoutingv2/georoutingv2.js');
     loadGeoRouting(config, createTag, getMetadata, loadBlock, loadStyle);
   }
+
+  decorateFooterPromo();
+
   const appendage = getMetadata('title-append');
   if (appendage) {
     import('../features/title-append/title-append.js').then((module) => module.default(appendage));
@@ -986,8 +994,8 @@ async function documentPostSectionLoading(config) {
   const { default: delayed } = await import('../scripts/delayed.js');
   delayed([getConfig, getMetadata, loadScript, loadStyle, loadIms]);
 
-  import('../martech/analytics.js').then((analytics) => {
-    document.querySelectorAll('main > div').forEach((section, idx) => analytics.decorateSectionAnalytics(section, idx));
+  import('../martech/attributes.js').then((analytics) => {
+    document.querySelectorAll('main > div').forEach((section, idx) => analytics.decorateSectionAnalytics(section, idx, config));
   });
 }
 
@@ -1040,7 +1048,7 @@ export async function loadArea(area = document) {
   await decoratePlaceholders(area, config);
 
   if (isDoc) {
-    decorateDocumentExtras(config);
+    decorateDocumentExtras();
   }
 
   const sections = decorateSections(area, isDoc);
