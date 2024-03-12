@@ -7,3 +7,4 @@ import '@spectrum-web-components/icons-ui/icons/sp-icon-dash100.js';
 import '@spectrum-web-components/icons-ui/icons/sp-icon-dash200.js';
 import '@spectrum-web-components/icons-ui/icons/sp-icon-dash300.js';
 import '@spectrum-web-components/icons-ui/icons/sp-icon-dash75.js';
+import '@spectrum-web-components/icons-ui/icons/sp-icon-chevron100.js';
