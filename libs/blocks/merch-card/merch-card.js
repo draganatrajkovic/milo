@@ -5,139 +5,113 @@ import { processTrackingLabels } from '../../martech/attributes.js';
 import { replaceKey } from '../../features/placeholders.js';
 import '../../deps/merch-card.js';
 
-const PRODUCT_NAMES = [
-  'acrobat-pdf-pack',
-  'acrobat-pro-2020',
-  'acrobat-reader-dc-mobile',
-  'acrobat-reader-dc',
-  'acrobat-sign-solutions-mobile',
-  'acrobat-sign-solutions',
-  'acrobat-standard-2020',
-  'acrobat-standard-dc',
-  'acrobat',
-  'adobe-connect',
-  'adobe-export-pdf',
-  'adobe-firefly',
-  'adobe-scan',
-  'advertising-cloud',
-  'aero',
-  'aftereffects',
-  'analytics',
-  'animate',
-  'audience-manager',
-  'audition',
-  'behance',
-  'bridge',
-  'campaign',
-  'captivate-prime',
-  'captivate',
-  'capture',
-  'all-apps',
-  'express',
-  'character-animator',
-  'cloud-service',
-  'coldfusion-aws',
-  'coldfusion-builder',
-  'coldfusion-enterprise',
-  'coldfusion',
-  'color',
-  'commerce-cloud',
-  'content-server',
-  'customer-journey-analytics',
-  'design-to-print',
-  'digital-editions',
-  'dreamweaver',
-  'embedded-print-engine',
-  'experience-manager-assets',
-  'experience-manager-forms',
-  'experience-manager-sites',
-  'experience-manager',
-  'experience-platform',
-  'fill-sign',
-  'fonts',
-  'frame',
-  'framemaker-publishing-server',
-  'framemaker',
-  'fresco',
-  'http-dynamic-streaming',
-  'illustrator',
-  'incopy',
-  'indesign-server',
-  'indesign',
-  'intelligent-services',
-  'journey-orchestration',
-  'lightroom-classic',
-  'lightroom',
-  'magento',
-  'marketo',
-  'media-encoder',
-  'media-server-aws',
-  'media-server-extended',
-  'media-server-professional',
-  'media-server-standard',
-  'mixamo',
-  'pdf-print-engine',
-  'pepe',
-  'photoshop-elements',
-  'photoshop-express',
-  'photoshop',
-  'portfolio',
-  'postscript',
-  'premiere-elements',
-  'premierepro',
-  'presenter-video-express',
-  'real-time-customer-data-platform',
-  'robohelp-server',
-  'robohelp',
-  'stock',
-  'substance-3d-designer',
-  'substance-3d-modeler',
-  'substance-3d-painter',
-  'substance-3d-sampler',
-  'substance-3d-stager',
-  'target',
-  'technical-communication-suite',
-  'type',
-  'xml-documentation',
-];
-
 const TAG_PATTERN = /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-].*$/;
 
-const CARD_TYPES = ['segment', 'special-offers', 'plans', 'catalog', 'product', 'inline-heading'];
+const CARD_TYPES = ['segment', 'special-offers', 'plans', 'catalog', 'product', 'inline-heading', 'image', 'mini-compare-chart'];
 
-const textStyles = {
+const TEXT_STYLES = {
   H5: 'detail-m',
   H4: 'body-xxs',
   H3: 'heading-xs',
   H2: 'heading-m',
 };
 
+const HEADING_MAP = {
+  'special-offers': {
+    H5: 'H4',
+    H3: 'H3',
+  },
+};
+
+const MINI_COMPARE_CHART = 'mini-compare-chart';
+
+const MULTI_OFFER_CARDS = ['plans', 'product', MINI_COMPARE_CHART];
+// Force cards to refresh once they become visible so that the footer rows are properly aligned.
+const intersectionObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    const container = entry.target.closest('main > div');
+    if (!container) return;
+    [...container.querySelectorAll('merch-card')].forEach((card) => card.requestUpdate());
+    intersectionObserver.unobserve(entry.target);
+  });
+});
+
 const getPodType = (styles) => styles?.find((style) => CARD_TYPES.includes(style));
 
 const isHeadingTag = (tagName) => /^H[2-5]$/.test(tagName);
 const isParagraphTag = (tagName) => tagName === 'P';
 
+const appendSlot = (slotEls, slotName, merchCard) => {
+  if (slotEls.length === 0) return;
+  const newEl = createTag(
+    'p',
+    { slot: slotName, class: slotName },
+  );
+  slotEls.forEach((e, index) => {
+    newEl.innerHTML += e.innerHTML;
+    if (index < slotEls.length - 1) {
+      newEl.innerHTML += '<br>';
+    }
+  });
+  merchCard.append(newEl);
+};
+
 const parseContent = (el, merchCard) => {
   const innerElements = [
-    ...el.querySelectorAll('h2, h3, h4, h5, p, ul'),
+    ...el.querySelectorAll('h2, h3, h4, h5, p, ul, em'),
   ];
-  const bodySlot = createTag('div', { slot: 'body-xs' });
+  let bodySlotName = `body-${merchCard.variant !== MINI_COMPARE_CHART ? 'xs' : 'm'}`;
+  let headingMCount = 0;
+
+  if (merchCard.variant === MINI_COMPARE_CHART) {
+    bodySlotName = 'body-m';
+    const promoText = el.querySelectorAll('h5');
+    const priceSmallType = el.querySelectorAll('h6');
+    appendSlot(promoText, 'promo-text', merchCard);
+    appendSlot(priceSmallType, 'price-commitment', merchCard);
+  }
+
+  let headingSize = 3;
+  const bodySlot = createTag('div', { slot: bodySlotName });
 
   innerElements.forEach((element) => {
-    const { tagName } = element;
+    let { tagName } = element;
     if (isHeadingTag(tagName)) {
-      const slotName = textStyles[tagName];
+      let slotName = TEXT_STYLES[tagName];
       if (slotName) {
+        if (['H2', 'H3', 'H4', 'H5'].includes(tagName)) {
+          if (HEADING_MAP[merchCard.variant]?.[tagName]) {
+            tagName = HEADING_MAP[merchCard.variant][tagName];
+          } else {
+            if (tagName === 'H2') {
+              headingMCount += 1;
+            }
+            if (headingMCount === 2 && merchCard.variant === MINI_COMPARE_CHART) {
+              slotName = 'heading-m-price';
+            }
+            tagName = `H${headingSize}`;
+            headingSize += 1;
+          }
+        }
         element.setAttribute('slot', slotName);
-        merchCard.append(element);
+        const newElement = createTag(tagName);
+        Array.from(element.attributes).forEach((attr) => {
+          newElement.setAttribute(attr.name, attr.value);
+        });
+        newElement.innerHTML = element.innerHTML;
+        merchCard.append(newElement);
       }
       return;
     }
     if (isParagraphTag(tagName)) {
       bodySlot.append(element);
+      merchCard.append(bodySlot);
     }
   });
-  merchCard.append(bodySlot);
+
+  if (merchCard.variant === MINI_COMPARE_CHART && merchCard.childNodes[1]) {
+    merchCard.insertBefore(bodySlot, merchCard.childNodes[1]);
+  }
 };
 
 const getBadgeStyle = (badgeMetadata) => {
@@ -189,16 +163,14 @@ const addMerchCardGridIfMissing = (section, cardType) => {
   if (directSection) {
     section.classList.add('three-merch-cards', cardType);
   }
-
   return false;
 };
 
 const decorateMerchCardLinkAnalytics = (el) => {
   [...el.querySelectorAll('a')].forEach((link, index) => {
-    const config = getConfig();
     const heading = el.querySelector('h3');
-    const linkText = `${processTrackingLabels(link.textContent, config)}-${index + 1}`;
-    const headingText = heading ? `${processTrackingLabels(heading.textContent, config)}` : '';
+    const linkText = `${processTrackingLabels(link.textContent)}-${index + 1}`;
+    const headingText = heading ? `${processTrackingLabels(heading.textContent)}` : '';
     const analyticsString = heading ? `${linkText}--${headingText}` : linkText;
     link.setAttribute('daa-ll', analyticsString);
   });
@@ -220,10 +192,74 @@ const addStock = (merchCard, styles) => {
   }
 };
 
+const simplifyHrs = (el) => {
+  const hrs = el.querySelectorAll('hr');
+  hrs.forEach((hr) => {
+    if (hr.parentElement.tagName === 'P') {
+      hr.parentElement.replaceWith(hr);
+    }
+  });
+};
+
+function extractQuantitySelect(el) {
+  const quantitySelectConfig = el.querySelector('ul');
+  if (!quantitySelectConfig) return null;
+  const configMarkup = quantitySelectConfig.querySelector('li');
+  if (!configMarkup || !configMarkup.textContent.includes('Quantity')) return null;
+  const config = configMarkup.querySelector('ul').querySelectorAll('li');
+  if (config.length !== 2) return null;
+  const attributes = {};
+  attributes.title = config[0].textContent.trim();
+  const values = config[1].textContent.split(',')
+    .map((value) => value.trim())
+    .filter((value) => /^\d*$/.test(value))
+    .map((value) => (value === '' ? undefined : Number(value)));
+  if (![3, 4, 5].includes(values.length)) return null;
+  import('../../deps/merch-quantity-select.js');
+  [attributes.min, attributes.max, attributes.step, attributes['default-value'], attributes['max-input']] = values;
+  const quantitySelect = createTag('merch-quantity-select', attributes);
+  quantitySelectConfig.remove();
+  return quantitySelect;
+}
+
+const getMiniCompareChartFooterRows = (el) => {
+  let footerRows = Array.from(el.children).slice(1);
+  footerRows = footerRows.filter((row) => !row.querySelector('.footer-row-cell'));
+  if (footerRows[0].firstElementChild.innerText === 'Alt-cta') {
+    footerRows.splice(0, 2);
+  }
+  footerRows.forEach((row) => row.remove());
+  return footerRows;
+};
+
+const decorateFooterRows = (merchCard, footerRows) => {
+  if (footerRows) {
+    const footerRowsSlot = createTag('div', { slot: 'footer-rows' });
+    footerRows.forEach((row) => {
+      const rowIcon = row.firstElementChild.querySelector('picture');
+      const rowText = row.querySelector('div > div:nth-child(2)').innerHTML;
+      const rowTextParagraph = createTag('p', { class: 'footer-row-cell-description' }, rowText);
+      const footerRowCell = createTag('div', { class: 'footer-row-cell' });
+      if (rowIcon) {
+        rowIcon.classList.add('footer-row-icon');
+        footerRowCell.appendChild(rowIcon);
+      }
+      footerRowCell.appendChild(rowTextParagraph);
+      footerRowsSlot.appendChild(footerRowCell);
+    });
+    merchCard.appendChild(footerRowsSlot);
+  }
+};
+
+const setMiniCompareOfferSlot = (merchCard, offers) => {
+  if (merchCard.variant !== MINI_COMPARE_CHART) return;
+  const miniCompareOffers = createTag('div', { slot: 'offers' }, offers);
+  if (offers === undefined) { miniCompareOffers.appendChild(createTag('p')); }
+  merchCard.appendChild(miniCompareOffers);
+};
+
 const init = async (el) => {
   const styles = [...el.classList];
-  const lastClass = styles[styles.length - 1];
-  const name = PRODUCT_NAMES.includes(lastClass) ? lastClass : undefined;
   const cardType = getPodType(styles) || 'product';
   if (!styles.includes(cardType)) {
     styles.push(cardType);
@@ -245,28 +281,20 @@ const init = async (el) => {
       }
     }
   }
-  const images = el.querySelectorAll('picture');
-  let image;
-  const icons = [];
   const merchCard = createTag('merch-card', { class: styles.join(' '), 'data-block': '' });
   merchCard.setAttribute('variant', cardType);
-  if (name) {
-    merchCard.setAttribute('name', name);
+  if (el.dataset.removedManifestId) {
+    merchCard.dataset.removedManifestId = el.dataset.removedManifestId;
   }
-  images.forEach((img) => {
-    const imgNode = img.querySelector('img');
-    const { width, height } = imgNode;
-    const isSquare = Math.abs(width - height) <= 10;
-    if (img) {
-      if (isSquare) {
-        icons.push(img);
-      } else {
-        image = img;
-      }
-    }
-  });
   let tags = {};
-  if (el.lastElementChild) {
+  if (el.lastElementChild?.previousElementSibling?.querySelector('h3,h4,h5,h6')) {
+    // tag section is available
+    const nameSelector = 'h3,h4,h5,h6';
+    const nameEl = el.lastElementChild.querySelector(nameSelector);
+    if (nameEl) {
+      merchCard.setAttribute('name', nameEl.textContent?.trim());
+      nameEl.remove();
+    }
     tags = extractTags(el.lastElementChild);
     if (tags.categories?.length > 1 || tags.types?.length > 0) {
     // this div contains tags, remove it from further processing.
@@ -289,6 +317,29 @@ const init = async (el) => {
       }
     }
   }
+  let footerRows;
+  if (cardType === MINI_COMPARE_CHART) {
+    const container = el.closest('[data-status="decorated"]');
+    if (container) {
+      intersectionObserver.observe(container);
+    }
+    footerRows = getMiniCompareChartFooterRows(el);
+  }
+  const images = el.querySelectorAll('picture');
+  let image;
+  const icons = [];
+  images.forEach((img) => {
+    const imgNode = img.querySelector('img');
+    const { width, height } = imgNode;
+    const isSquare = Math.abs(width - height) <= 10;
+    if (img) {
+      if (isSquare) {
+        icons.push(img);
+      } else {
+        image = img;
+      }
+    }
+  });
   const actionMenuContent = cardType === 'catalog'
     ? getActionMenuContent(el)
     : null;
@@ -338,19 +389,39 @@ const init = async (el) => {
   parseContent(el, merchCard);
   const footer = createTag('div', { slot: 'footer' });
   if (ctas) {
-    decorateButtons(ctas);
+    if (merchCard.variant === 'mini-compare-chart') {
+      decorateButtons(ctas, 'button-l');
+    } else {
+      decorateButtons(ctas);
+    }
     footer.append(ctas);
   }
   merchCard.appendChild(footer);
-  const offerSelection = cardType === 'plans' ? el.querySelector('ul') : null;
-  if (offerSelection) {
-    const { initOfferSelection } = await import('./merch-offer-select.js');
-    initOfferSelection(merchCard, offerSelection);
+
+  if (MULTI_OFFER_CARDS.includes(cardType)) {
+    const quantitySelect = extractQuantitySelect(el);
+    const offerSelection = el.querySelector('ul');
+    if (offerSelection) {
+      const { initOfferSelection } = await import('./merch-offer-select.js');
+      setMiniCompareOfferSlot(merchCard, undefined);
+      initOfferSelection(merchCard, offerSelection, quantitySelect);
+    }
+    if (quantitySelect) {
+      if (merchCard.variant === MINI_COMPARE_CHART) {
+        setMiniCompareOfferSlot(merchCard, quantitySelect);
+      } else {
+        const bodySlot = merchCard.querySelector('div[slot="body-xs"]');
+        bodySlot.append(quantitySelect);
+      }
+    }
   }
+
   decorateBlockHrs(merchCard);
+  simplifyHrs(merchCard);
   if (merchCard.classList.contains('has-divider')) {
     merchCard.setAttribute('custom-hr', true);
   }
+  decorateFooterRows(merchCard, footerRows);
   el.replaceWith(merchCard);
   decorateMerchCardLinkAnalytics(merchCard);
   return merchCard;

@@ -60,11 +60,11 @@ export function decorateBlockText(el, config = ['m', 's', 'm'], type = null) {
         decorateIconArea(el);
       }
     }
-    const emptyPs = el.querySelectorAll(':scope p:not([class])');
-    if (emptyPs.length) {
-      emptyPs.forEach((p) => p.classList.add(`body-${config[1]}`));
+    const emptyEls = el.querySelectorAll('p:not([class]), ul:not([class]), ol:not([class])');
+    if (emptyEls.length) {
+      emptyEls.forEach((p) => p.classList.add(`body-${config[1]}`));
     } else {
-      [...el.querySelectorAll(':scope div:not([class])')]
+      [...el.querySelectorAll('div:not([class])')]
         .filter((emptyDivs) => emptyDivs.textContent.trim() !== '')
         .forEach((text) => text.classList.add(`body-${config[1]}`));
     }
@@ -110,6 +110,7 @@ export async function decorateBlockBg(block, node, { useHandleFocalpoint = false
       }
       if (!child.querySelector('img, video, a[href*=".mp4"]')) {
         child.style.background = child.textContent;
+        child.classList.add('expand-background');
         child.textContent = '';
       }
     });
@@ -168,20 +169,27 @@ export function decorateTextOverrides(el, options = ['-heading', '-body', '-deta
   });
 }
 
-export function getVideoAttrs(hash) {
+export function getVideoAttrs(hash, dataset) {
   const isAutoplay = hash?.includes('autoplay');
   const isAutoplayOnce = hash?.includes('autoplay1');
   const playOnHover = hash?.includes('hoverplay');
+  const poster = dataset?.videoPoster ? `poster='${dataset.videoPoster}'` : '';
+  const globalAttrs = `playsinline ${poster}`;
+  const autoPlayAttrs = 'autoplay muted';
+
   if (isAutoplay && !isAutoplayOnce) {
-    return 'playsinline autoplay loop muted';
+    return `${globalAttrs} ${autoPlayAttrs} loop`;
   }
   if (playOnHover && isAutoplayOnce) {
-    return 'playsinline autoplay muted data-hoverplay';
+    return `${globalAttrs} ${autoPlayAttrs} data-hoverplay`;
+  }
+  if (playOnHover) {
+    return `${globalAttrs} muted data-hoverplay`;
   }
   if (isAutoplayOnce) {
-    return 'playsinline autoplay muted';
+    return `${globalAttrs} ${autoPlayAttrs}`;
   }
-  return 'playsinline controls';
+  return `${globalAttrs} controls`;
 }
 
 export function applyHoverPlay(video) {
